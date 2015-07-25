@@ -1,5 +1,7 @@
 from BrowserShadow import BrowserShadow
 from bs4 import BeautifulSoup
+import mysql.connector
+import sys, os
 
 
 # query the total number of the records
@@ -99,7 +101,7 @@ def parse_page_obtian_event(page_soup):
     for index in range(1 , len(event_content)):
         item_list = event_content[index].find_all('td')
         SummaryNr = item_list[2].find('a').get_text()
-        EventData = item_list[3].get_text()
+        EventDate = item_list[3].get_text()
         ReportID = item_list[4].get_text()
         Fat = item_list[5].get_text()
         if Fat.find('X') > -1 :
@@ -114,16 +116,29 @@ def parse_page_obtian_event(page_soup):
         accident_url_str = item_list[2].find('a')['href']
         accident_url_str = 'https://www.osha.gov/pls/imis/' + accident_url_str
 
-        print(SummaryNr)
+        #print(SummaryNr)
         brw_d = BrowserShadow()
         res_d = brw_d.open_url(accident_url_str)
         page_content_d = res_d.read()
         page_soup_d = BeautifulSoup(page_content_d, "html.parser")
-        parse_accident_details(page_soup_d)
+
+        # parse the detail information about the event
+        abstract_info = {'SummaryNr':SummaryNr , 'EventDate':EventDate, 'ReportID':ReportID, 'Fat':str(Fat), 'SIC':SIC, 'EventDesc':EventDesc}
+        parse_accident_details(page_soup_d , abstract_info)
+
+        break
 
 
         
-def parse_accident_details(page_soup_d):
+def parse_accident_details(page_soup_d, abstract_info):
+
+    #obtian the cursor of the mysql connection
+    user = 'test'
+    pwd = '123456'
+    host = '127.0.0.1'
+    db = 'reported_fall_event'
+    cnx = mysql.connector.connect(user=user, password=pwd, host=host, database=db)
+    cursor = cnx.cursor()
 
     event_content_details = page_soup_d.find_all('tr')
 
@@ -134,24 +149,102 @@ def parse_accident_details(page_soup_d):
             keyword_position = index
 
 
-    EventDescD = event_content_details[keyword_position - 1]
-    Keyworkds = event_content_details[keyword_position]
-    EndUse = event_content_details[keyword_position + 2].find_all('td')[0]
-    ProjType = event_content_details[keyword_position + 2].find_all('td')[1]
-    ProjCost = event_content_details[keyword_position + 2].find_all('td')[2]
-    Stories = event_content_details[keyword_position + 2].find_all('td')[3]
-    NonBldgHt = event_content_details[keyword_position + 2].find_all('td')[4]
+    EventDescD = event_content_details[keyword_position - 1].get_text()
+    Keyworkds = event_content_details[keyword_position].get_text().replace('Keywords:', '')
+    EndUse = event_content_details[keyword_position + 2].find_all('td')[0].get_text()
+    ProjType = event_content_details[keyword_position + 2].find_all('td')[1].get_text()
+    ProjCost = event_content_details[keyword_position + 2].find_all('td')[2].get_text()
+    Stories = event_content_details[keyword_position + 2].find_all('td')[3].get_text()
+    NonBldgHt = event_content_details[keyword_position + 2].find_all('td')[4].get_text()
 
-    inspection_num = 0
+    # insert the case information
+    """
+    cases_info_str = 'SummaryNr, EventDate, ReportID, Fat, SIC, EventDesc, '
+    cases_info_str = cases_info_str + 'EventDescD, Keywords, EndUse, '
+    cases_info_str = cases_info_str + 'ProjType, ProjCost, Stories, NonbldgHt'
+
+    cases_info_value_str = "'" + str(abstract_info['SummaryNr']) + "'" + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(abstract_info['EventDate']) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(abstract_info['ReportID']) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + str(abstract_info['Fat']) + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(abstract_info['SIC']) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(abstract_info['EventDesc']) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(EventDescD) + "'"  + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(Keyworkds) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(EndUse) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(ProjType) + "'"   + ','
+    cases_info_value_str = cases_info_value_str + "'" + str(ProjCost) + "'" + ','
+    cases_info_value_str = cases_info_value_str + str(Stories) + ','
+    cases_info_value_str = cases_info_value_str + str(NonBldgHt)
+    
+    insert_case_info_sql_str = "insert into cases_info({case_info}) values ({case_info_value})"
+    insert_case_info_sql_str = insert_case_info_sql_str.format(case_info = cases_info_str, case_info_value = cases_info_value_str)
+    """
+
+    insert_sql_str = ("insert into cases_info "
+                      "(SummaryNr, EventDate, ReportID, Fat, SIC, EventDesc, "
+                      "EventDescD, Keywords, EndUse, ProjType, ProjCost, Stories, NonbldgHt)"
+                      "values(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+
+    insert_values = (abstract_info['SummaryNr'], abstract_info['EventDate'], abstract_info['ReportID'],abstract_info['Fat'],abstract_info['SIC'],abstract_info['EventDesc'],
+                     EventDescD, Keyworkds, EndUse, ProjType, ProjCost, Stories, NonBldgHt)
+    
+    #print(insert_case_info_sql_str)
+    """
+    try:
+        cursor.execute(insert_sql_str, insert_values)
+        print('=============================')
+        print('insert cases_info')
+        print('=============================')
+        cnx.commit()
+    except mysql.connector.Error as err:
+        print("Insert cases_info Table Failed.")
+        print("Error: {}".format(err.msg))
+        sys.exit()
+    """
+    
     for index in range(2, keyword_position - 1, 2):
         current_insp_id = event_content_details[index].find_all('td')[0].get_text()
         current_insp_date = event_content_details[index].find_all('td')[1].get_text()
         current_insp_sic = event_content_details[index].find_all('td')[2].get_text()
         current_insp_establishment_name = event_content_details[index].find_all('td')[3].get_text()
         #print(current_insp_id + '--' + current_insp_date + '--' + current_insp_sic + '--' + current_insp_establishment_name)
-        inspection_num = inspection_num + 1
 
-    employee_num = 0
+        # insert into table inspection_info
+        """
+        insp_info_str = 'InspectionID, OpenDate, SIC, EstablishmentName'
+
+        insp_info_value_str = "'" + str(current_insp_id) + "'" + ','
+        insp_info_value_str = insp_info_value_str + "'" + str(current_insp_date) + "'" + ','
+        insp_info_value_str = insp_info_value_str + "'" + str(current_insp_sic) + "'" + ','
+        insp_info_value_str = insp_info_value_str + "'" + str(current_insp_establishment_name) + "'"
+
+        insert_insp_info_sql_str = "insert into inspection_info({insp_info}) values ({insp_info_value})"
+        insert_insp_info_sql_str = insert_insp_info_sql_str.format(insp_info = insp_info_str, insp_info_value = insp_info_value_str)
+
+        print(insert_insp_info_sql_str)
+        """
+
+        insert_sql_str = ("insert into inspection_info "
+                      "(InspectionID, OpenDate, SIC, EstablishmentName)"
+                      "values(%s, %s, %s, %s)")
+
+        insert_values = (current_insp_id, current_insp_date, current_insp_sic,current_insp_establishment_name )
+
+        """
+        try:
+            cursor.execute(insert_sql_str, insert_values)
+            print('=============================')
+            print('insert inspection_info')
+            print('=============================')
+            cnx.commit()
+        except mysql.connector.Error as err:
+            print("Insert inspection_info Table Failed.")
+            print("Error: {}".format(err.msg))
+            sys.exit()
+        break
+        """
+
     for index in range(keyword_position + 4, len(event_content_details)):
         current_employee_eid = event_content_details[index].find_all('td')[0].get_text()
         current_employee_insp_id = event_content_details[index].find_all('td')[1].get_text()
@@ -160,15 +253,64 @@ def parse_accident_details(page_soup_d):
         current_employee_degree = event_content_details[index].find_all('td')[4].get_text()
         current_employee_nature = event_content_details[index].find_all('td')[5].get_text()
         current_employee_occupation = event_content_details[index].find_all('td')[6].get_text()
-        current_employee_consruction = event_content_details[index].find_all('td')[7].get_text()
 
+        construction_str = str(event_content_details[index].find_all('td')[7])
+        construction_str = construction_str.replace('<td>' , '')
+        construction_str = construction_str.replace('</td>' , '')
+        construction_str = construction_str.replace('<b>' , '')
+        construction_str = construction_str.replace('</b>' , '')
+        construction_str = construction_str.replace('</br>' , '')
+        construction_list = construction_str.split('<br>')
+        current_employee_consruction = "{"
+        for index in range(0, len(construction_list) - 1):
+            item_one_name = construction_list[index].split(':')
+            current_employee_consruction = current_employee_consruction + "'"+item_one_name[0]+"':'"+item_one_name[1] + "',"
+        item_one_name = construction_list[index + 1].split(':')
+        current_employee_consruction =current_employee_consruction + "'"+item_one_name[0]+"':'"+item_one_name[1] + "'}"
         #print(current_employee_eid + '--' + current_employee_insp_id + '--' + current_employee_age + '--' + current_employee_sex + '--' + current_employee_degree + '--' + current_employee_nature + '--' + current_employee_occupation + '--' + current_employee_consruction)
-        employee_num = employee_num + 1
 
-    #print(inspection_num)
-    #print(employee_num)
-    
+        """
+        employee_info_str = 'EID, SummaryNr, InspectionID, Age, Sex, Degree, Nature, Occupation, Construction'
+        employee_info_value_str = str(current_employee_eid) + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(abstract_info['SummaryNr']) + "'" + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(current_employee_insp_id) + "'" + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(current_employee_age) + "'" + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(current_employee_sex) + "'" + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(current_employee_degree) + "'" + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(current_employee_nature) + "'" + ','
+        employee_info_value_str = employee_info_value_str + "'" + str(current_employee_occupation) + "'" + ','
+        employee_info_value_str = employee_info_value_str + '"' + str(current_employee_consruction) + '"'
+
+        insert_employee_info_sql_str = "insert into case_employees({emp_info}) values ({emp_info_value})"
+        insert_employee_info_sql_str = insert_employee_info_sql_str.format(emp_info = employee_info_str, emp_info_value = employee_info_value_str)
+
+        print(insert_employee_info_sql_str)
+        """
+
+        insert_sql_str = ("insert into case_employees "
+                      "(EID, SummaryNr, InspectionID, Age, Sex, Degree, Nature, Occupation, Construction)"
+                      "values(%s, %s, %s, %s, %s, %s, %s, %s, %s)")
+
+        insert_values = (current_employee_eid, abstract_info['SummaryNr'], current_employee_insp_id,current_employee_age,
+                         current_employee_sex, current_employee_degree, current_employee_nature, current_employee_occupation, current_employee_consruction)
         
+        try:
+            cursor.execute(insert_sql_str, insert_values)
+            print('=============================')
+            print('insert case_employees')
+            print('=============================')
+            cnx.commit()
+        except mysql.connector.Error as err:
+            print("Insert case_employees Table Failed.")
+            print("Error: {}".format(err.msg))
+            sys.exit()
+        break
+            
+    cursor.close()
+    cnx.close()
+    
+    
+
 get_record_list(15, '15', '06', '1989', '15', '06', '2015')
 #article_info_list = get_articles_list(15, 0 , 0)
 #get_article_content(article_info_list)
